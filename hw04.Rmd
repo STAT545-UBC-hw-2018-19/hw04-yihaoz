@@ -1,0 +1,252 @@
+---
+title: 'Homework 04: Tidy data and joins'
+output: 
+    github_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+# Overview
+The goal of this homework is to solidify data wrangling skills by working some realistic problems in the grey area between data aggregation and data reshaping.
+
+```{r}
+## load gapminder and tidyverse
+suppressPackageStartupMessages(library(gapminder))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(tidyr))
+```
+
+# Data Reshaping Prompts
+## Activity 1. Make your own cheatsheet.
+
+To Reshape the data, `gather()` and `spread()` are commonly used.
+
+### `gather()`
+
+`gather()` takes multiple columns and collapses into key-value pairs, duplicating all other columns as needed. It converts wide data from to long. `gather(data, key, value, ..., na.rm, convert, factor_key)` takes a data frame to manipulate. *key* generates a new column with its name and *value* is the value extracted from the data frame. `...` specifies the columns to get.  
+
+For demo, a short subset of data frame *gapminder* is used. The subset includes the Oceania countries' lifeExp, pop and gdpPercap in year 1952. 
+
+```{r}
+# Create a small subset of gapminder for demo purpose
+oceania_gapminder <- gapminder %>% 
+  filter((year == '1952') & continent == 'Oceania') %>% 
+  select(country, lifeExp, pop, gdpPercap)
+
+# Use knitr::kable() for a better looking table
+knitr::kable(oceania_gapminder, align = 'c')
+```
+
+With `gather()`, the *item* column will go through lifeExp, pop and gdoPercap and the *number* will display the corresponding number of such entry in original data frame. 
+
+```{r}
+# use gather to create two columns which go through each columns in original data frame
+gathered_data <- oceania_gapminder %>% 
+  gather(item, number, -c(country))
+
+# Use knitr::kable() for a better looking table
+knitr::kable(gathered_data, align = 'c')
+```
+
+### `spread()`
+`spread()` spreads a key-value multiple columns. It converts long data frame into wide data frame. `spread(data, key, value, fill, convert, drop, sep)` takes a data frame, its key value pair. It is the reverse operation of `gather()`. 
+
+For demo, I will use `spread()` to convert the previously computed gathered_data back into oceania_gapminder. The gathered_data after `gather()` is:
+
+```{r}
+# gathered data after gather()
+knitr::kable(gathered_data, align = 'c')
+```
+
+```{r}
+# try to convert gathered_data back to original using spread()
+spread_data = gathered_data %>% 
+  spread(item, number)
+knitr::kable(spread_data, align = 'c')
+```
+
+As result shows, the data frame after `spread()` shows the same contents as original *oceania_gapminder* which is before `gather()` applied. 
+
+
+## Activity 2. Make a tibble with one row per year and columns for life expectancy for two or more countries.
+
+Note that for this part, some tables are very long. I know when outputing the html format we can specify the size of table and add the scroll bar for it. However, I didn't find the workarounds for it when outputing to github_document.
+
+We can use `spread()` to make a large tibble with one row per year and columns for life expectancy for all the countrie. 
+```{r}
+lifeExp_all <- gapminder %>% 
+  select(year, lifeExp, country) %>% 
+  # create key-value pair with country and lifeExp
+  spread(country, lifeExp) 
+
+knitr::kable(lifeExp_all)
+```
+
+To make the table smaller, we can use `filter()` to get the life expectancy for only interested countries.
+
+```{r}
+# select interested columns
+lifeExp_selected <- lifeExp_all %>% 
+  select(c('year', 'China', 'Canada', 'Argentina', 'Australia'))
+knitr::kable(lifeExp_selected, align = 'c')
+```
+
+With the new shape of data frame, a scatterplot can be applied to scatterplot life expectancy for one country against that of another.
+
+```{r Activity 1-2, fig.cap = "lifeExp For Selected Countries"}
+lifeExp_selected %>% 
+  # columns from 2 to 5 are countries, key-value pair as country and lifeExp
+  gather(selected_country, life_exp ,2:5) %>% 
+  ggplot(aes(year, life_exp, color = selected_country)) +
+  geom_line() + 
+  geom_point(aes(shape = selected_country)) + 
+  ggtitle( "Life Expectancy for selected countries" ) +
+  xlab( "Year") +
+  ylab( "Life expectancy" )
+```
+
+By using `gather()`, multiple lines are plotted without calling `geom_line()` for multiple times. Also, it makes coloring easier by just specifying keys after `gather()`.
+
+
+## Activity 3. Compute some measure of life expectancy (mean? median? min? max?) for all possible combinations of continent and year. Reshape that to have one row per year and one variable for each continent.
+
+First group the data frame by year and continent. Then use `summarise()` function to compute the measurements. 
+```{r}
+lifeExp_continent <- gapminder %>%   
+  group_by( year, continent ) %>% 
+  # compute the measurements
+  summarise( mean = mean( lifeExp ),
+            median = median( lifeExp ),
+            max = max( lifeExp ),
+            min = min( lifeExp ))
+# create the long table
+knitr::kable(lifeExp_continent, align = 'c')
+```
+
+To reshape the data frame, first use `gather()` to gather all the measurements for each continent, then use `spread()` to convert long data frame to wide one. 
+
+```{r}
+lifeExp_conti_reshaped <- lifeExp_continent %>% 
+  # create key-value as type of statistics and its value
+  gather(statistics, values, 3:6) %>% 
+  # spread the data by continent
+  spread(continent, values)
+knitr::kable(lifeExp_conti_reshaped, align = 'c')
+```
+
+By the reshaped data frame, we can plot the scatterplot for one continent and colored by the type of statistics. 
+
+```{r Activity 1-3-1, fig.cap="Africa life expectancy statistics"}
+lifeExp_conti_reshaped %>% 
+  ggplot(aes(year, Africa)) + 
+  geom_line(aes(color = statistics)) + 
+  ggtitle('Africa life expectancy statistics') + 
+  xlab('year') + 
+  ylab('lifeExp')
+```
+
+It is also easier to plot all the data for continents and facet by different types of statistics.
+
+```{r Activity 1-3-2, fig.cap="lifeExp for all continents facet by statistics"}
+lifeExp_conti_reshaped %>% 
+  gather(continent, values, 3:7) %>% 
+  ggplot(aes(year, values, color = continent)) + 
+  geom_line() + 
+  facet_wrap(~statistics) +
+  ggtitle("Statistics of Life Expectancy for all continents") + 
+  ylab("lifeExp") + 
+  xlab("year")
+```
+
+
+# Join Prompts
+
+## Activity 1 Create a second data frame, complementary to Gapminder. Join this with (part of) Gapminder using a dplyr join function and make some observations about the process and result. Explore the different types of joins.
+
+First I created a data frame of spoken language and capital city of five different countries in Asia. To illustrated the differences between `left_join()`, `right_join()` and `inner_join()`, I intentionally added Australia into our asia_info data frame. 
+
+```{r}
+asia_info <-  data.frame(
+  country = c("China", "Hong Kong, China", "India", "Japan", "Korea, Dem. Rep.","Australia"),
+  language = c("Mandarin", "Cantonese", "Indian", "Japanese", "Korean", "English"),
+  capital = c("Beijing", "N/A", "New Delhi", "Tokyo", "Pyongyang", "Canberra")
+)
+asia_info
+```
+
+Filter the gapminder to be asia only
+```{r}
+asia_gapminder <- gapminder %>% 
+  filter(continent == "Asia")
+asia_gapminder
+```
+
+`left_join()` to join asia_gapminder into asia_info
+
+```{r}
+# Join matching rows from asia_gapminder to asia_info by matching "country" variable
+knitr::kable(left_join(asia_info, asia_gapminder, by = "country"), align = 'c')
+```
+
+It only contains the countries in asia_info and the matched countries rows from asia_gapminder are added. Note that it also has row for Australia since its in aisa_info but not in asia_gapminder
+
+Switch the order:
+
+```{r}
+knitr::kable(left_join(asia_gapminder, asia_info, by = "country"), align = 'c')
+```
+
+Now only countries in asia_info will have language and capital specified. Also, Australia is not in the resulting table since it's not in asia_gapminder.
+
+`right_join()` join asia_info into asia_gapminder
+
+```{r}
+# Join matching rows from asia_info to asia_gapminder by matching "country" variable
+knitr::kable(right_join(asia_info, asia_gapminder, by = "country"), align = 'c')
+```
+It has the same content as `left_join(asia_info, asia_gapminder, by = "country")` but column order switched. 
+
+If we switch the parameters' order:
+
+```{r}
+knitr::kable(right_join(asia_gapminder, asia_info, by = "country"), align = 'c')
+```
+
+Now it has the same content as `left_join(asia_gapminder, asia_info)` but column order switched.
+
+`inner_join()`:
+
+```{r}
+inner_join(asia_gapminder, asia_info, by = "country")
+```
+
+Compared to `left_join(asia_info, asia_gapminder, by = "country")`, Australia is not in the results. Because `inner_join` only joins the intersection of two data frames. 
+
+
+## Activity 3.
+
+###Explore the base R function merge(), which also does joins. Compare and contrast with dplyr joins.
+`merge()` merges two data frames by common columns or row names, or do other versions of database join operations.
+```{r}
+merge(asia_info, asia_gapminder) %>% 
+  knitr::kable(align = 'c')
+```
+
+Switch order:
+```{r}
+merge(asia_gapminder, asia_info) %>% 
+  knitr::kable(align = 'c')
+```
+
+From the result, we can see it has the same result of `inner_join()` and the order doesn't matter.
+
+
+###Explore the base R function match(), which is related to joins and merges, but is really more of a “table lookup”. Compare and contrast with a true join/merge.
+
+`match()` returns a vector of the positions of (first) matches of its first argument in its second.
+```{r}
+match(asia_info$country, asia_gapminder$country) %>% 
+  knitr::kable(align = 'c')
+```
+
+It returns the indices of matched rows. Since Australia is not in asia_gapminder, it returns N/A. With `match()`, it is more complicated to perform the same functionalities as `merge()` and `join()` since it only gives matched rows. More steps of iterating through each matched rows and manipulating row data are required. 

@@ -10,7 +10,7 @@ editor_options:
 The goal of this homework is to solidify data wrangling skills by working some realistic problems in the grey area between data aggregation and data reshaping.
 
 ```{r}
-## load gapminder and tidyverse
+## load gapminder, tidyverse and tidyr
 suppressPackageStartupMessages(library(gapminder))
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(tidyr))
